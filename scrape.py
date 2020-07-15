@@ -8,7 +8,7 @@ import re
 
 
 def short_sleep():
-    sleep(1)
+    sleep(.2)
 
 
 def scrape_url(url: str):
@@ -30,27 +30,37 @@ def scrape_url(url: str):
                 and "</a></li>" in line \
                 and "*>" not in line:
 
-            # Typical line:
+            # FROM:
             #       <li><a href=/photo/apii/genus/Ziziphus>Ziziphus</a></li>
-            # What we're after out of that:
+            # TO:
             #       /photo/apii/genus/Ziziphus
             url_suffix = re.search('/[^>]*', line)
             genus_links.add(root + url_suffix[0])
 
+    # Traverse each genus index, and extract image page URLs
+    genus_image_pages: Dict[str, set] = {}
     for url in genus_links:
+        current_genus = url.split("/")[-1]  # last element is species name
         short_sleep()  # Please don't ban me
-        image_urls = set()
 
         current_genus_index = requests.get(url).text.splitlines()
-        href_lines = [l for l in current_genus_index if 'href="' in l]
+        href_lines = [l for l in current_genus_index if 'href="' in l and "/dig/" in l]
 
+        # FROM
+        #   <!-- Marianthus tenuis --><a href="/photo/apii/id/dig/45444">Marianthus tenuis</a>, close up, flowers<br/>
+        # TO
+        #   https://anbg.gov.au/cgi-bin/phtml?pc=dig&pn=45444&size=3
+        image_urls = set()
         for line in href_lines:
-            image_urls.add(
-                root + re.search('/[^"]*', line)[0])
+            image_id = re. \
+                search('/[^"]*', line)[0]. \
+                split("/")[-1]
+            image_urls.add(f"https://anbg.gov.au/cgi-bin/phtml?pc=dig&pn={image_id}&size=3")
 
-        for (i, j) in zip(href_lines, image_urls):
-            print(f"\n-------\n {i} \n {j} \n -------\n")
-            # TODO: download images, figure out species names
+        if len(image_urls) > 1:  # Skip when one or fewer images are found
+            genus_image_pages[current_genus] = image_urls
+
+    # TODO: download images
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:  # URL not provided
