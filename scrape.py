@@ -1,14 +1,15 @@
 #!/user/bin/env python3
 
-import sys
-from typing import *
-from time import sleep
-import requests
 import re
+import sys
+from time import sleep
+from typing import *
+
+import requests
 
 
-def short_sleep():
-    sleep(.2)
+def short_sleep(duration: float):
+    sleep(duration)
 
 
 def scrape_url(url: str):
@@ -29,7 +30,6 @@ def scrape_url(url: str):
                 and "<a href=" in line \
                 and "</a></li>" in line \
                 and "*>" not in line:
-
             # FROM:
             #       <li><a href=/photo/apii/genus/Ziziphus>Ziziphus</a></li>
             # TO:
@@ -41,26 +41,38 @@ def scrape_url(url: str):
     genus_image_pages: Dict[str, set] = {}
     for url in genus_links:
         current_genus = url.split("/")[-1]  # last element is species name
-        short_sleep()  # Please don't ban me
+        short_sleep(0.2)  # Please don't ban me
 
         current_genus_index = requests.get(url).text.splitlines()
-        href_lines = [l for l in current_genus_index if 'href="' in l and "/dig/" in l]
+        href_lines = [l for l in current_genus_index
+                      if 'href="' in l
+                      and "/dig/" in l
+                      and (  # search descriptors to weed out any sketches, microscopic images, or other misc. images
+                              "fruit" in l or
+                              "close up" in l or
+                              "flowers" in l or
+                              "whole plant" in l or
+                              "leaves" in l or
+                              "leaf" in l
+                      )]
 
         # FROM
         #   <!-- Marianthus tenuis --><a href="/photo/apii/id/dig/45444">Marianthus tenuis</a>, close up, flowers<br/>
         # TO
-        #   https://anbg.gov.au/cgi-bin/phtml?pc=dig&pn=45444&size=3
+        #   https://anbg.gov.au/photo/apii/id/dig/45444
         image_urls = set()
         for line in href_lines:
-            image_id = re. \
-                search('/[^"]*', line)[0]. \
-                split("/")[-1]
-            image_urls.add(f"https://anbg.gov.au/cgi-bin/phtml?pc=dig&pn={image_id}&size=3")
+            image_location = re.search('/[^"]*', line)[0]
+            image_urls.add(f"https://anbg.gov.au{image_location}")  # matched substring already includes leading /
 
         if len(image_urls) > 1:  # Skip when one or fewer images are found
             genus_image_pages[current_genus] = image_urls
+            print(image_urls)
+
+    # TODO: build map of per-species image links
 
     # TODO: download images
+
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:  # URL not provided
