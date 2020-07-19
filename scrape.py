@@ -1,5 +1,6 @@
 #!/user/bin/env python3
 
+import csv
 import json
 import re
 import sys
@@ -54,9 +55,8 @@ def scrape_url(url: str):
             url_suffix = re.search('/[^>]*', line)
             genus_links.add(root + url_suffix[0])
 
-    # Dict['genus species', url_set]]
-    image_links: Dict[str, set] = {}
-    rejected: List[Tuple[str, str]] = [("", "")]
+    image_links: Dict[str, set] = {}  # Dict[genus species, image pages]]
+    rejected: List[Tuple[str, str]] = []
 
     # Traverse each genus index, and extract image page URLs
     for url in tqdm(genus_links):
@@ -129,14 +129,33 @@ def scrape_url(url: str):
             dump_images_and_faults(image_links, rejected)
 
     dump_images_and_faults(image_links, rejected)
-    # TODO: finish
 
 
-# TODO: download images
+def download_images():
+    pass
+    # TODO: download images
+
+
+def generate_image_count_csv():
+    with open("links.json", "r") as f:
+        links: Dict[str, set] = json.load(f)
+        species = sorted(links.keys())
+
+    with open("data.csv", "w") as f:
+        writer = csv.writer(f)
+
+        for class_name in species:
+            genus = class_name.split(" ")[0]
+            specie = " ".join(class_name.split(" ")[1:])
+            writer.writerow((genus, specie, len(links[class_name])))
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:  # URL not provided
         print("Please provide destination URL to scrape images from")
+    elif sys.argv[1] == "csv":
+        generate_image_count_csv()
+    elif sys.argv[1] == "download":
+        download_images()
     else:
         scrape_url(sys.argv[1])
