@@ -3,6 +3,8 @@
 import json
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
+from random import randint
 from time import sleep
 from typing import *
 
@@ -17,7 +19,7 @@ def short_sleep(duration: float):
 def dump_images_and_faults(image_links: Dict[str, set], faults: List[Tuple[str, str]]):
     print(f"Recording {len(image_links.keys())} classes links", end=" ")
     with open('links.json', 'w') as f:
-        json.dump(image_links, f)
+        json.dump({k: list(v) for (k, v) in image_links.items()}, f)  # set is not JSON serialisable :(
     print("done")
 
     print("Recording faults", end=" ")
@@ -57,15 +59,10 @@ def scrape_url(url: str):
 
     # Traverse each genus index, and extract image page URLs
     for url in tqdm(genus_links):
-        current_genus = url.split("/")[-1]  # last element is species name
-        print(f"Recording image links for genus => {current_genus} ... ", end="")
-
-        short_sleep(0.05)  # Please don't ban me
-
-        current_genus_index = requests.get(url).text.splitlines()
-        href_lines = [href for href in current_genus_index
+        genus_index_page = requests.get(url).text.splitlines()
+        href_lines = [href for href in genus_index_page
                       if 'href="' in href
-                      and "/dig/" in href
+                      and "/photo/apii" in href
                       and (  # search descriptors to weed out any sketches, microscopic images, or other misc. images
                               "fruit" in href or
                               "plant" in href or
@@ -79,15 +76,15 @@ def scrape_url(url: str):
         #   <!-- Marianthus tenuis --><a href="/photo/apii/id/dig/45444">Marianthus tenuis</a>, close up, flowers<br/>
         # TO
         #   https://anbg.gov.au/photo/apii/id/dig/45444
-        image_urls = set()
+        image_page_urls = set()
         for line in href_lines:
             image_location = re.search('/[^"]*', line)[0]
             # matched substring already includes leading forward slash, &size=3 returns the page for the bigger image
-            image_urls.add(f"https://anbg.gov.au{image_location}&size=3")
+            image_page_urls.add(f"https://anbg.gov.au{image_location}&size=3")
 
         # Build the species: image_links dict
-        if len(image_urls) > 1:  # Skip when one or fewer images are found
-            for link in image_urls:
+        if len(image_page_urls) > 1:  # Skip when one or fewer images are found
+            def process_image_page(link: str):
                 page = requests.get(link).text
 
                 # Regex magic ¯\_(ツ)_/¯
@@ -97,7 +94,9 @@ def scrape_url(url: str):
                 class_tag = re.search("(?!(<h2>))[^>]*(?=(</h2>))", page)
 
                 if image_href is None or class_tag is None:
-                    print(f"Errored out: {image_href} {class_tag} on page \n {page}")
+                    rejected.append(Tuple["Unknown", page])
+                elif "see Illustrator" in page:
+                    rejected.append(Tuple["Illustration", page])
                 else:
                     class_tag_text = class_tag[0]
                     # Skip image if:
@@ -107,7 +106,7 @@ def scrape_url(url: str):
                     if len(class_tag_text.split(" ")) <= 1 or \
                             "," in class_tag_text or \
                             " x " in class_tag_text:
-                        continue
+                        return
 
                     # remove subspecies/ variety information, and metadata within brackets
                     class_tag_text = re. \
@@ -118,12 +117,15 @@ def scrape_url(url: str):
 
                     if len(class_tag_text.split(" ")) <= 1:
                         rejected.append((class_tag_text, current_image_url))
-                    elif len(image_links) > 1:  # Can't train and validate/ test off just one image
+                    else:
                         if class_tag_text not in image_links.keys():
                             image_links[class_tag_text] = set()
                         image_links[class_tag_text].add(current_image_url)
 
-        if len(image_links.keys()) % 6 == 0 and len(image_links.keys()) > 0:
+            with ThreadPoolExecutor(max_workers=32) as executor:
+                executor.map(process_image_page, image_page_urls)
+
+        if randint(0, 50) == 10:
             dump_images_and_faults(image_links, rejected)
 
     dump_images_and_faults(image_links, rejected)
