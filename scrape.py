@@ -2,9 +2,11 @@
 
 import csv
 import json
+import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from multiprocessing.pool import ThreadPool
 from random import randint
 from time import sleep
 from typing import *
@@ -131,9 +133,29 @@ def scrape_url(url: str):
     dump_images_and_faults(image_links, rejected)
 
 
+def download_from_url_to_class(item: Tuple[str, Set[str]]):
+    if not os.path.exists(f"./dataset/{item[0]}"):
+        os.mkdir(f"./dataset/{item[0]}")
+
+    for url in item[1]:
+        try:
+            file_name = url.split("/")[-1]
+            file_contents = requests.get(url).content
+            open(f"./dataset/{item[0]}/{file_name}", "wb+").write(file_contents)
+        except:
+            print(f"Something went wrong download file at {url}")
+
+
 def download_images():
-    pass
-    # TODO: download images
+    with open("links.json", "r") as f:
+        links: Dict[str, set] = json.load(f)
+
+        if not os.path.exists("./dataset"):
+            os.mkdir("./dataset")
+
+        downloads = ThreadPool(128).imap_unordered(download_from_url_to_class, iterable=links.items())
+        for _ in downloads:
+            print("*", end="")
 
 
 def generate_image_count_csv():
