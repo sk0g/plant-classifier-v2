@@ -1,15 +1,29 @@
 #!/user/bin/env python3
 
+import json
 import re
 import sys
 from time import sleep
 from typing import *
 
 import requests
+from tqdm import tqdm
 
 
 def short_sleep(duration: float):
     sleep(duration)
+
+
+def dump_images_and_faults(image_links: Dict[str, set], faults: List[Tuple[str, str]]):
+    print(f"Recording {len(image_links.keys())} classes links", end=" ")
+    with open('links.json', 'w') as f:
+        json.dump(image_links, f)
+    print("done")
+
+    print("Recording faults", end=" ")
+    with open('faults.json', 'w') as f:
+        json.dump(faults, f)
+    print("done")
 
 
 def scrape_url(url: str):
@@ -37,27 +51,28 @@ def scrape_url(url: str):
             url_suffix = re.search('/[^>]*', line)
             genus_links.add(root + url_suffix[0])
 
-    # Dict[genus, Dict[species, url_set]]
-    image_links: Dict[str, Dict[str, set]] = {}
+    # Dict['genus species', url_set]]
+    image_links: Dict[str, set] = {}
+    rejected: List[Tuple[str, str]] = [("", "")]
 
     # Traverse each genus index, and extract image page URLs
-    for url in genus_links:
+    for url in tqdm(genus_links):
         current_genus = url.split("/")[-1]  # last element is species name
         print(f"Recording image links for genus => {current_genus} ... ", end="")
 
-        short_sleep(0.2)  # Please don't ban me
+        short_sleep(0.05)  # Please don't ban me
 
         current_genus_index = requests.get(url).text.splitlines()
-        href_lines = [l for l in current_genus_index
-                      if 'href="' in l
-                      and "/dig/" in l
+        href_lines = [href for href in current_genus_index
+                      if 'href="' in href
+                      and "/dig/" in href
                       and (  # search descriptors to weed out any sketches, microscopic images, or other misc. images
-                              "fruit" in l or
-                              "plant" in l or
-                              "close up" in l or
-                              "flowers" in l or
-                              "leaves" in l or
-                              "leaf" in l
+                              "fruit" in href or
+                              "plant" in href or
+                              "close up" in href or
+                              "flowers" in href or
+                              "leaves" in href or
+                              "leaf" in href
                       )]
 
         # FROM
@@ -72,8 +87,6 @@ def scrape_url(url: str):
 
         # Build the species: image_links dict
         if len(image_urls) > 1:  # Skip when one or fewer images are found
-            species_links: Dict[str, set] = {}
-
             for link in image_urls:
                 page = requests.get(link).text
 
@@ -84,7 +97,7 @@ def scrape_url(url: str):
                 class_tag = re.search("(?!(<h2>))[^>]*(?=(</h2>))", page)
 
                 if image_href is None or class_tag is None:
-                    raise Exception(f"Error finding class tag {class_tag} OR  image_href {image_href}")
+                    print(f"Errored out: {image_href} {class_tag} on page \n {page}")
                 else:
                     class_tag_text = class_tag[0]
                     # Skip image if:
@@ -98,20 +111,26 @@ def scrape_url(url: str):
 
                     # remove subspecies/ variety information, and metadata within brackets
                     class_tag_text = re. \
-                        sub(r"(sub|var|\().*", "", class_tag_text). \
-                        replace("sp. ", "")
+                        sub(r"( sub| f\.| var| \().*", "", class_tag_text). \
+                        replace(" sp.", ""). \
+                        strip()
+                    current_image_url = root + image_href[0]
 
-                    if len(class_tag_text.split(" ")) != 2:
-                        print(class_tag_text)
-                    # image_url = root + image_href[0]
+                    if len(class_tag_text.split(" ")) <= 1:
+                        rejected.append((class_tag_text, current_image_url))
+                    elif len(image_links) > 1:  # Can't train and validate/ test off just one image
+                        if class_tag_text not in image_links.keys():
+                            image_links[class_tag_text] = set()
+                        image_links[class_tag_text].add(current_image_url)
 
-                    short_sleep(.05)
+        if len(image_links.keys()) % 6 == 0 and len(image_links.keys()) > 0:
+            dump_images_and_faults(image_links, rejected)
 
-                # TODO: finish
+    dump_images_and_faults(image_links, rejected)
+    # TODO: finish
 
-        print("done")
 
-    # TODO: download images
+# TODO: download images
 
 
 if __name__ == '__main__':
