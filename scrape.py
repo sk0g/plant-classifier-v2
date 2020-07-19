@@ -17,12 +17,13 @@ def short_sleep(duration: float):
 
 
 def dump_images_and_faults(image_links: Dict[str, set], faults: List[Tuple[str, str]]):
-    print(f"Recording {len(image_links.keys())} classes links", end=" ")
+    print(f"Recording {len(image_links.keys())} species' links", end="... ")
     with open('links.json', 'w') as f:
-        json.dump({k: list(v) for (k, v) in image_links.items()}, f)  # set is not JSON serialisable :(
+        # set is not JSON serialisable, and skip species if one or zero images are found
+        json.dump({k: list(v) for (k, v) in image_links.items() if len(v) > 1}, f)
     print("done")
 
-    print("Recording faults", end=" ")
+    print("Recording faults", end="... ")
     with open('faults.json', 'w') as f:
         json.dump(faults, f)
     print("done")
@@ -83,47 +84,46 @@ def scrape_url(url: str):
             image_page_urls.add(f"https://anbg.gov.au{image_location}&size=3")
 
         # Build the species: image_links dict
-        if len(image_page_urls) > 1:  # Skip when one or fewer images are found
-            def process_image_page(link: str):
-                page = requests.get(link).text
+        def process_image_page(link: str):
+            page = requests.get(link).text
 
-                # Regex magic ¯\_(ツ)_/¯
-                # Extract image href
-                image_href = re.search("/images/photo_cd/.*?jpg*", page)
-                # Extract value between h2 tag, which describes the class
-                class_tag = re.search("(?!(<h2>))[^>]*(?=(</h2>))", page)
+            # Regex magic ¯\_(ツ)_/¯
+            # Extract image href
+            image_href = re.search("/images/photo_cd/.*?jpg*", page)
+            # Extract value between h2 tag, which describes the class
+            class_tag = re.search("(?!(<h2>))[^>]*(?=(</h2>))", page)
 
-                if image_href is None or class_tag is None:
-                    rejected.append(Tuple["Unknown", page])
-                elif "see Illustrator" in page:
-                    rejected.append(Tuple["Illustration", page])
+            if image_href is None or class_tag is None:
+                rejected.append(Tuple["Unknown", page])
+            elif "see Illustrator" in page:
+                rejected.append(Tuple["Illustration", page])
+            else:
+                class_tag_text = class_tag[0]
+                # Skip image if:
+                #   species is not defined,
+                #   multiple classes are present
+                #   plant is a cross species (formatted as specie1 x specie2)
+                if len(class_tag_text.split(" ")) <= 1 or \
+                        "," in class_tag_text or \
+                        " x " in class_tag_text:
+                    return
+
+                # remove subspecies/ variety information, and metadata within brackets
+                class_tag_text = re. \
+                    sub(r"( sub| f\.| var| \().*", "", class_tag_text). \
+                    replace(" sp.", ""). \
+                    strip()
+                current_image_url = root + image_href[0]
+
+                if len(class_tag_text.split(" ")) <= 1:
+                    rejected.append((class_tag_text, current_image_url))
                 else:
-                    class_tag_text = class_tag[0]
-                    # Skip image if:
-                    #   species is not defined,
-                    #   multiple classes are present
-                    #   plant is a cross species (formatted as specie1 x specie2)
-                    if len(class_tag_text.split(" ")) <= 1 or \
-                            "," in class_tag_text or \
-                            " x " in class_tag_text:
-                        return
+                    if class_tag_text not in image_links.keys():
+                        image_links[class_tag_text] = set()
+                    image_links[class_tag_text].add(current_image_url)
 
-                    # remove subspecies/ variety information, and metadata within brackets
-                    class_tag_text = re. \
-                        sub(r"( sub| f\.| var| \().*", "", class_tag_text). \
-                        replace(" sp.", ""). \
-                        strip()
-                    current_image_url = root + image_href[0]
-
-                    if len(class_tag_text.split(" ")) <= 1:
-                        rejected.append((class_tag_text, current_image_url))
-                    else:
-                        if class_tag_text not in image_links.keys():
-                            image_links[class_tag_text] = set()
-                        image_links[class_tag_text].add(current_image_url)
-
-            with ThreadPoolExecutor(max_workers=32) as executor:
-                executor.map(process_image_page, image_page_urls)
+        with ThreadPoolExecutor(max_workers=32) as executor:
+            executor.map(process_image_page, image_page_urls)
 
         if randint(0, 50) == 10:
             dump_images_and_faults(image_links, rejected)
