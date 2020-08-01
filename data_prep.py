@@ -88,7 +88,7 @@ def generate_split():
     """
 
     basedir = "./dataset"
-    split_dir = "./split-0"
+    split_dir = "../split-0"
     train_dir, val_dir, test_dir = [os.path.join(split_dir, c) for c in ["train", "val", "test"]]
     [os.path.isdir(d) or os.mkdir(d) for d in [split_dir, train_dir, val_dir, test_dir]]
 
