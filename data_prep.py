@@ -43,6 +43,24 @@ def deal_with_cultivars():
                     os.remove(file_path)
         os.rmdir(current_path)
 
+    # cultivars with species attached, should have cultivar data removed
+    cultivar_folders_remaining = [f for f in folder_names if
+                                  f.count("'") >= 2]
+    for cultivar_folder in cultivar_folders_remaining:
+        non_cultivar_species_exists = cultivar_folder.split("'")[0].strip() in folder_names
+        folder_path = os.path.join(basedir, cultivar_folder)
+
+        for _, _, files in os.walk(folder_path):
+            for f in files:
+                if non_cultivar_species_exists:  # Move all files to non-cultivar species, delete folder
+                    os.rename(
+                        os.path.join(folder_path, f),
+                        os.path.join(folder_path.split("'")[0].strip(), f))
+                else:  # Remove all images, delete folder
+                    os.remove(os.path.join(folder_path, f))
+
+        os.rmdir(folder_path)
+
 
 if __name__ == '__main__':
     task = sys.argv[1]
