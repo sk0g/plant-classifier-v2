@@ -1,5 +1,6 @@
 # Project files
 dataset/
+split-0/
 *.csv
 *.json
 

@@ -2,6 +2,8 @@
 
 import os
 import sys
+from random import shuffle
+from shutil import copy
 
 
 def deal_with_cultivars():
@@ -79,8 +81,38 @@ def remove_small_folders():
             print("Done")
 
 
-def split_test():
-    pass
+def generate_split():
+    """
+    Generate a split folder, in ../split-0/
+    Should contain the following folders: train|val|test
+    """
+
+    basedir = "./dataset"
+    split_dir = "./split-0"
+    train_dir, val_dir, test_dir = [os.path.join(split_dir, c) for c in ["train", "val", "test"]]
+    [os.path.isdir(d) or os.mkdir(d) for d in [split_dir, train_dir, val_dir, test_dir]]
+
+    for root, dir, files in os.walk(basedir):
+        if root != basedir:
+            species_name = root.split("/")[-1]
+            for current_directory in [train_dir, val_dir, test_dir]:
+                if not os.path.isdir(os.path.join(current_directory, species_name)):
+                    os.mkdir(os.path.join(current_directory, species_name))
+
+            # Allocate 15% each (or 1, whichever is higher) to test and val, then the rest to train
+            file_count = len(files)
+            file_paths = [os.path.join(root, f) for f in files]
+
+            test_and_val_count = max(1, round(file_count * .15))
+            shuffle(file_paths)
+
+            test_files = [file_paths.pop() for _ in range(test_and_val_count)]
+            val_files = [file_paths.pop() for _ in range(test_and_val_count)]
+            train_files = file_paths
+
+            [copy(test_file, test_file.replace(basedir, test_dir)) for test_file in test_files]
+            [copy(val_file, val_file.replace(basedir, val_dir)) for val_file in val_files]
+            [copy(train_file, train_file.replace(basedir, train_dir)) for train_file in train_files]
 
 
 if __name__ == '__main__':
@@ -89,5 +121,5 @@ if __name__ == '__main__':
         deal_with_cultivars()
     elif task == "delete-small":
         remove_small_folders()
-    elif task == "split-test":
-        pass
+    elif task == "split":
+        generate_split()
