@@ -62,7 +62,32 @@ def deal_with_cultivars():
         os.rmdir(folder_path)
 
 
+def remove_small_folders():
+    """
+    Folders too small (<3 examples) can't be split for training/validation/testing
+    Delete images in such folders, and then their folders
+    """
+    basedir = "./dataset"
+
+    for root, dir, files in os.walk(basedir):
+        if root != basedir and len(files) < 3:
+            print(f"Folder to delete {root} {files}")
+
+            [os.remove(os.path.join(root, f)) for f in files]
+            os.rmdir(root)
+
+            print("Done")
+
+
+def split_test():
+    pass
+
+
 if __name__ == '__main__':
     task = sys.argv[1]
-    if task == "cultivars1":
+    if task == "cultivars":
         deal_with_cultivars()
+    elif task == "delete-small":
+        remove_small_folders()
+    elif task == "split-test":
+        pass
