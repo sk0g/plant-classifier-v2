@@ -5,6 +5,8 @@ import sys
 from random import shuffle
 from shutil import copy
 
+from matplotlib import pyplot
+
 
 def deal_with_cultivars():
     basedir = "./dataset"
@@ -110,9 +112,23 @@ def generate_split():
             val_files = [file_paths.pop() for _ in range(test_and_val_count)]
             train_files = file_paths
 
-            [copy(test_file, test_file.replace(basedir, test_dir)) for test_file in test_files]
-            [copy(val_file, val_file.replace(basedir, val_dir)) for val_file in val_files]
-            [copy(train_file, train_file.replace(basedir, train_dir)) for train_file in train_files]
+            [copy(test_file, test_file.replace(basedir, test_dir)).replace(".", "") for test_file in test_files]
+            [copy(val_file, val_file.replace(basedir, val_dir)).replace(".", "") for val_file in val_files]
+            [copy(train_file, train_file.replace(basedir, train_dir)).replace(".", "") for train_file in train_files]
+
+
+def display_dataset_sizes():
+    sizes = []
+
+    for (root, dirs, files) in os.walk("./dataset/"):
+        sizes.append(len(files))
+
+    sizes.sort(reverse=True)
+
+    pyplot.plot([s for s in sizes if s > 20])
+    pyplot.ylabel("Samples")
+    pyplot.xlabel("Classes")
+    pyplot.show()
 
 
 if __name__ == '__main__':
@@ -123,3 +139,5 @@ if __name__ == '__main__':
         remove_small_folders()
     elif task == "split":
         generate_split()
+    elif task == "graph-sizes":
+        display_dataset_sizes()
